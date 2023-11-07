@@ -1,4 +1,4 @@
-package dbaccess
+package dependency
 
 type Metadata struct {
 	ID        string
