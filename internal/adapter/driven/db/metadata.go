@@ -20,3 +20,10 @@ func (d *dbMetadata) Add(ctx context.Context, meta interfaces.Metadata, tx *sql.
 	_, err := tx.Exec(sql, meta.ObjectId, meta.ParentId, meta.Name, meta.BasicAttr)
 	return err
 }
+
+func (d *dbMetadata) QueryCountById(ctx context.Context, objectId string) (count int, err error) {
+	sql := "select count(1) from metadata where objectId=?"
+	row := d.db.QueryRow(sql, objectId)
+	err = row.Scan(&count)
+	return
+}

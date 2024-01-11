@@ -17,7 +17,7 @@ type CreateDirRsp struct {
 	ObjectId string `json:"object_id"` // 创建目录的 objectId
 }
 
-type MetadataServer interface {
+type MetadataLogic interface {
 	// BeginUpload 开始文件上传
 	BeginUpload(ctx context.Context, req BeginUploadReq) (BeginUploadRsp, error)
 	EndUpload(ctx context.Context, req EndUploadReq) (EndUploadRsp, error)

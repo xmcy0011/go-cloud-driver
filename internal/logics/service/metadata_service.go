@@ -22,5 +22,25 @@ func NewMetadataService(db *sql.DB, metadata interfaces.DBMetadata, closure inte
 }
 
 func (m *metadataService) Create(ctx context.Context, metadata interfaces.Metadata) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}()
 
+	err = m.metadata.Add(ctx, metadata, tx)
+	if err != nil {
+		return err
+	}
+	_, err = m.closure.Add(ctx, metadata.ObjectId, metadata.ParentId, tx)
+	if err != nil {
+		return err
+	}
+	return nil
 }

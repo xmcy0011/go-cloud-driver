@@ -1,6 +1,10 @@
 server:
-  user_name: dd
-  password: dd
-  db: dd
-  host: dd
-  port: dd
+  listen: 0.0.0.1
+  port: 9800
+
+mysql:
+  user_name: cloud
+  password: 123456
+  db: cloud-disk
+  host: 127.0.0.1
+  port: 3306
