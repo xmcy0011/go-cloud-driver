@@ -9,7 +9,8 @@ import (
 )
 
 type Config struct {
-	Db Database `yaml:"db"`
+	Db     Database   `yaml:"db" json:"db"`
+	Server HttpServer `yaml:"server" json:"server"`
 }
 
 type Database struct {
@@ -23,9 +24,12 @@ type Database struct {
 	WriteTimeout time.Duration `yaml:"write_timeout" json:"write_timeout"`
 }
 
-var C Config
+type HttpServer struct {
+	Listen string `yaml:"listen" json:"listen"`
+	Port   int    `yaml:"port" json:"port"`
+}
 
-func Load(config string) {
+func MustLoad(config string) *Config {
 	f, err := os.Open(config)
 	if err != nil {
 		panic(err)
@@ -37,8 +41,10 @@ func Load(config string) {
 		panic(err)
 	}
 
-	err = yaml.Unmarshal(data, C)
+	c := &Config{}
+	err = yaml.Unmarshal(data, c)
 	if err != nil {
 		panic(err)
 	}
+	return c
 }
