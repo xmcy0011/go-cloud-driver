@@ -9,6 +9,7 @@ import (
 
 type MetadataService interface {
 	Create(ctx context.Context, metadata interfaces.Metadata) error
+	QueryById(ctx context.Context, ObjectId string) (*interfaces.Metadata, error)
 }
 
 type metadataService struct {
@@ -43,4 +44,8 @@ func (m *metadataService) Create(ctx context.Context, metadata interfaces.Metada
 		return err
 	}
 	return nil
+}
+
+func (m *metadataService) QueryById(ctx context.Context, objectId string) (*interfaces.Metadata, error) {
+	return m.metadata.QueryById(ctx, objectId)
 }

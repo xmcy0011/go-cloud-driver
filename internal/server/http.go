@@ -42,6 +42,7 @@ func NewHttpServer(config conf.Config) *HttpServer {
 
 	// 入栈适配器
 	h.restHandler = driver.NewHttpRestHandler(metadataLogic)
+	h.restHandler.RegisterRouter(h.engine)
 
 	return h
 }

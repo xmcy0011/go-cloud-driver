@@ -8,11 +8,21 @@ import (
 )
 
 var (
-	config = flag.String("conf", "config.yaml", "-conf fileName")
+	config = flag.String("conf", "../config/config.yaml", "-conf fileName")
 )
 
 func main() {
 	flag.Parse()
+
+	// go func() {
+	// 	r := gin.Default()
+	// 	r.GET("/ping", func(c *gin.Context) {
+	// 		c.JSON(http.StatusOK, gin.H{
+	// 			"message": "pong",
+	// 		})
+	// 	})
+	// 	r.Run(":9800")
+	// }()
 
 	c := conf.MustLoad(*config)
 	httpServer := server.NewHttpServer(*c)

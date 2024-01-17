@@ -9,7 +9,7 @@ import (
 )
 
 type Config struct {
-	Db     Database   `yaml:"db" json:"db"`
+	Db     Database   `yaml:"mysql" json:"db"`
 	Server HttpServer `yaml:"server" json:"server"`
 }
 

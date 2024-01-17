@@ -23,6 +23,7 @@ type MetadataClosure struct {
 type DBMetadata interface {
 	Add(ctx context.Context, meta Metadata, tx *sql.Tx) error
 	QueryCountById(ctx context.Context, objectId string) (int, error)
+	QueryById(ctx context.Context, objectId string) (*Metadata, error)
 }
 
 // DBMetadataClosure 元数据闭包关系表
