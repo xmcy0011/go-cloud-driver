@@ -1,9 +1,9 @@
 package common
 
 // BasicAttr 对象类型
-type BasicAttr int
+type ObjectType int
 
 const (
-	BasicAttrFile BasicAttr = 1 // 文件
-	BasicAttrDir  BasicAttr = 2 // 目录
+	ObjectTypeDir  ObjectType = 1 // 文件
+	ObjectTypeFile ObjectType = 2 // 目录
 )

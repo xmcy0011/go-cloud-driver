@@ -1,10 +1,14 @@
 package driver
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/xmcy0011/go-cloud-driver/pkg/bizerr"
+	"github.com/pkg/errors"
+	"github.com/xmcy0011/go-cloud-driver/internal/logics/common"
+	"go.uber.org/zap"
 )
 
 type HttpRestError struct {
@@ -18,25 +22,28 @@ type HttpRestError struct {
 	//Solution string
 }
 
-const (
-	RestBadRequest          string = "bad.request"
-	RestServerInternalError string = "server.internal.error"
-)
-
 func BadRequest(err error) error {
-	return bizerr.WithCause(http.StatusBadRequest, RestBadRequest, err.Error())
+	return common.WithCause(common.RestBadRequest, err.Error())
 }
 
 func (h *HttpRestHandler) responseError(g *gin.Context, err error) {
-	if bizErr, ok := err.(bizerr.Error); ok {
+	h.log.Info("", zap.Error(errors.Cause(err)))
+
+	log.Println(errors.Cause(err))
+
+	if bizErr, ok := err.(common.BizError); ok {
 		g.JSON(bizErr.StatusCode, HttpRestError{
 			Code:  bizErr.Code,
-			Cause: bizErr.Cause,
+			Cause: fmt.Sprintf("%s %s", bizErr.FileLine, bizErr.Cause),
 		})
 	} else {
 		g.JSON(http.StatusInternalServerError, HttpRestError{
-			Code:  RestServerInternalError,
+			Code:  common.RestServerInternalError,
 			Cause: err.Error(),
 		})
 	}
+}
+
+func (h *HttpRestHandler) responseOk(g *gin.Context, httpCode int, data any) {
+	g.JSON(httpCode, data)
 }
