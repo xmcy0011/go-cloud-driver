@@ -29,17 +29,16 @@ type QuerySubTreeReq struct {
 }
 
 type QuerySubTreeRsp struct {
-	SubTrees map[string]SubTrees // 子树列表
+	SubTrees *MetadataTreeNode `json:"sub_trees"` // 子树列表
 }
 
-type SubTrees struct {
-	ObjectId   string // 元数据id
-	ParentId   string // 父对象id
-	Name       string // 名称
-	ObjectType int    // 类型
-	Depth      int    //层级深度，从0开始
+type MetadataTreeNode struct {
+	ObjectId   string `json:"object_id"`   // 元数据id
+	Name       string `json:"name"`        // 名称
+	ObjectType int    `json:"object_type"` // 类型
+	Depth      int    `json:"depth"`       //层级深度，从0开始
 
-	SubTrees []SubTrees // 子树
+	Children []*MetadataTreeNode `json:"children,omitempty"` // 子树
 }
 
 type MetadataLogic interface {

@@ -17,7 +17,8 @@ type MetadataService interface {
 	Create(ctx context.Context, metadata interfaces.Metadata) error
 	QueryById(ctx context.Context, objectId string) (*interfaces.Metadata, error)
 	MoveDir(ctx context.Context, objectId, newParentId string) error
-	QuerySubTree(ctx context.Context, objectId string) ([]interfaces.MetadataNode, error)
+	// QuerySubTree: 查询并返回子树，根节点为 objectId 本身
+	QuerySubTree(ctx context.Context, objectId string) (root *interfaces.MetadataTreeNode, err error)
 }
 
 type metadataService struct {
@@ -114,8 +115,8 @@ func (m *metadataService) MoveDir(ctx context.Context, objectId, newParentId str
 	return err
 }
 
-func (m *metadataService) QuerySubTree(ctx context.Context, objectId string) ([]interfaces.MetadataNode, error) {
-	_, err := m.metadata.QueryById(ctx, objectId)
+func (m *metadataService) QuerySubTree(ctx context.Context, objectId string) (root *interfaces.MetadataTreeNode, err error) {
+	_, err = m.metadata.QueryById(ctx, objectId)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, common.WithCause(common.RestBadRequest, "objectId not found")
@@ -123,5 +124,53 @@ func (m *metadataService) QuerySubTree(ctx context.Context, objectId string) ([]
 		return nil, err
 	}
 
-	return m.closure.QueryAllDescendants(ctx, objectId)
+	closures, err := m.closure.QueryAllDescendants(ctx, objectId)
+	if err != nil {
+		return nil, err
+	}
+
+	return closures2TreeNode(objectId, closures)
+}
+
+func closures2TreeNode(objectId string, closures []interfaces.MetadataNode) (*interfaces.MetadataTreeNode, error) {
+	// 构建闭包表映射
+	closureMap := make(map[string][]interfaces.MetadataNode)
+	nodeMap := make(map[string]interfaces.MetadataNode, len(closures))
+	for _, c := range closures {
+		if _, ok := closureMap[c.Ancestor]; !ok {
+			closureMap[c.ParentId] = make([]interfaces.MetadataNode, 0)
+		}
+		closureMap[c.ParentId] = append(closureMap[c.ParentId], c)
+		nodeMap[c.ObjectId] = c
+	}
+
+	if _, ok := nodeMap[objectId]; !ok {
+		return nil, common.WithCause(common.RestServerInternalError, "unknown error")
+	}
+
+	return buildTree(objectId, closureMap, nodeMap), nil
+}
+
+// 递归构建树
+func buildTree(objectId string, closureMap map[string][]interfaces.MetadataNode,
+	nodeMap map[string]interfaces.MetadataNode) *interfaces.MetadataTreeNode {
+
+	node := &interfaces.MetadataTreeNode{
+		ObjectId: objectId,
+	}
+
+	if v, ok := nodeMap[objectId]; ok {
+		node.Name = v.Name
+		node.Depth = v.Depth
+		node.ObjectType = v.ObjectType
+	}
+
+	if closures, ok := closureMap[objectId]; ok {
+		for _, c := range closures {
+			childNode := buildTree(c.Descendant, closureMap, nodeMap)
+			node.Children = append(node.Children, childNode)
+		}
+	}
+
+	return node
 }

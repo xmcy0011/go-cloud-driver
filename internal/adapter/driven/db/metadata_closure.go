@@ -107,7 +107,7 @@ func (m *metadataClosure) QueryAllDescendants(ctx context.Context, ancestor stri
 
 	for rows.Next() {
 		info := interfaces.MetadataNode{}
-		err = rows.Scan(&info.Ancestor, &info.Depth, &info.Depth, &info.ObjectId, &info.ParentId, &info.Name, &info.ObjectType)
+		err = rows.Scan(&info.Ancestor, &info.Descendant, &info.Depth, &info.ObjectId, &info.ParentId, &info.Name, &info.ObjectType)
 		if err != nil {
 			return nil, err
 		}

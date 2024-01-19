@@ -25,6 +25,14 @@ type MoveDirReq struct {
 	NewParentId string `json:"new_parent_id"`
 }
 
+type ListSubTreeReq struct {
+	ObjectId string `json:"objectId"`
+}
+
+type ListSubTreeRes struct {
+	*interfaces.MetadataTreeNode
+}
+
 type HttpRestHandler struct {
 	log *zap.Logger
 
@@ -73,7 +81,25 @@ func (h *HttpRestHandler) createDir(g *gin.Context) {
 }
 
 func (h *HttpRestHandler) listDirSubTrees(g *gin.Context) {
+	objectId, ok := g.Params.Get("objectId")
+	if !ok {
+		h.responseError(g, BadRequest(errors.New("empty objectId")))
+		return
+	}
 
+	if _, err := ulid.Parse(objectId); err != nil {
+		h.responseError(g, BadRequest(errors.New("bad ulid format with objectId")))
+		return
+	}
+
+	ctx := context.Background()
+	root, err := h.metadata.QuerySubTree(ctx, interfaces.QuerySubTreeReq{ObjectId: objectId})
+	if err != nil {
+		h.responseError(g, err)
+	} else {
+		res := root.SubTrees
+		h.responseOk(g, http.StatusOK, res)
+	}
 }
 
 func (h *HttpRestHandler) moveDir(g *gin.Context) {
