@@ -116,3 +116,43 @@ func (m *metadataClosure) QueryAllDescendants(ctx context.Context, ancestor stri
 
 	return result, nil
 }
+
+func (m *metadataClosure) QueryExistByPairTx(ctx context.Context, closures []interfaces.MetadataClosure, tx *sql.Tx) (bool, error) {
+	if len(closures) == 0 {
+		return false, nil
+	}
+
+	sql := "select count(1) from metadata_closure where"
+	args := make([]any, 0)
+	for _, value := range closures {
+		sql += " ancestor=? and descendant=?"
+		args = append(args, value.Ancestor)
+		args = append(args, value.Descendant)
+	}
+	row := tx.QueryRowContext(ctx, sql, args...)
+	count := 0
+	if err := row.Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (m *metadataClosure) QueryExistByPair(ctx context.Context, closures []interfaces.MetadataClosure) (bool, error) {
+	if len(closures) == 0 {
+		return false, nil
+	}
+
+	sql := "select count(1) from metadata_closure where"
+	args := make([]any, 0)
+	for _, value := range closures {
+		sql += " ancestor=? and descendant=?"
+		args = append(args, value.Ancestor)
+		args = append(args, value.Descendant)
+	}
+	row := m.db.QueryRowContext(ctx, sql, args...)
+	count := 0
+	if err := row.Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

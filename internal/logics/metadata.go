@@ -31,16 +31,7 @@ func (m *metadataLogic) EndUpload(ctx context.Context, req interfaces.EndUploadR
 
 func (m *metadataLogic) CreateDir(ctx context.Context, req interfaces.CreateDirReq) (*interfaces.CreateDirRsp, error) {
 	uid := ulid.Make().String()
-
-	_, err := m.metadataSvc.QueryById(ctx, req.ParentId)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, common.WithCause(common.RestBadRequest, "parentId not found")
-		}
-		return nil, errors.WithStack(err)
-	}
-
-	err = m.metadataSvc.Create(ctx, interfaces.Metadata{
+	err := m.metadataSvc.Create(ctx, interfaces.Metadata{
 		ObjectId:   uid,
 		ParentId:   req.ParentId,
 		Name:       req.Name,

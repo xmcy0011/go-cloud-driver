@@ -22,10 +22,6 @@ type HttpRestError struct {
 	//Solution string
 }
 
-func BadRequest(err error) error {
-	return common.WithCause(common.RestBadRequest, err.Error())
-}
-
 func (h *HttpRestHandler) responseError(g *gin.Context, err error) {
 	h.log.Info("", zap.Error(errors.Cause(err)))
 

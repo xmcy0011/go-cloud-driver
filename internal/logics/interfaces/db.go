@@ -51,4 +51,8 @@ type DBMetadataClosure interface {
 	QueryAllDescendants(ctx context.Context, ancestor string) ([]MetadataNode, error)
 	// CheckIsDescendant: 检查某个节点是否是后代节点
 	CheckIsDescendant(ctx context.Context, ancestor, descendant string, tx *sql.Tx) (bool, error)
+	// QueryCountByPair 查询路径上的祖先后代关系是否存在
+	QueryExistByPair(ctx context.Context, closures []MetadataClosure) (bool, error)
+	// QueryCountByPair 查询路径上的祖先后代关系是否存在
+	QueryExistByPairTx(ctx context.Context, closures []MetadataClosure, tx *sql.Tx) (bool, error)
 }

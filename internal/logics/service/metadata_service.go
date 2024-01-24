@@ -16,6 +16,8 @@ import (
 type MetadataService interface {
 	Create(ctx context.Context, metadata interfaces.Metadata) error
 	QueryById(ctx context.Context, objectId string) (*interfaces.Metadata, error)
+	// CheckUrlExist: 检查路径是否存在
+	CheckUrlExist(ctx context.Context, metadataUrl string) (bool, error)
 	MoveDir(ctx context.Context, objectId, newParentId string) error
 	// QuerySubTree: 查询并返回子树，根节点为 objectId 本身
 	QuerySubTree(ctx context.Context, objectId string) (root *interfaces.MetadataTreeNode, err error)
@@ -34,10 +36,20 @@ func NewMetadataService(db *sql.DB, metadata interfaces.DBMetadata, closure inte
 
 func (m *metadataService) Create(ctx context.Context, metadata interfaces.Metadata) error {
 	err := dbhelper.ExecInTranscation(m.db, func(tx *sql.Tx) error {
-		err := m.metadata.Add(ctx, metadata, tx)
+		// 检查路径是否存在
+		_, err := m.metadata.QueryById(ctx, metadata.ParentId)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return common.WithCause(common.RestBadRequest, "parentId not exist")
+			}
+			return err
+		}
+		// 增加元数据
+		err = m.metadata.Add(ctx, metadata, tx)
 		if err != nil {
 			return err
 		}
+		// 增加祖先-后代关系
 		_, err = m.closure.Add(ctx, metadata.ParentId, metadata.ObjectId, tx)
 		if err != nil {
 			return err
@@ -50,6 +62,30 @@ func (m *metadataService) Create(ctx context.Context, metadata interfaces.Metada
 
 func (m *metadataService) QueryById(ctx context.Context, objectId string) (*interfaces.Metadata, error) {
 	return m.metadata.QueryById(ctx, objectId)
+}
+
+func (m *metadataService) CheckUrlExist(ctx context.Context, metadataUrl string) (bool, error) {
+	nodes, err := common.GetUrlNodes(metadataUrl)
+	if err != nil {
+		return false, err
+	}
+
+	// 组装祖先-后代节点关系
+	closures := make([]interfaces.MetadataClosure, 0, len(nodes))
+	parent := ""
+	for key, str := range nodes {
+		if key == 0 {
+			parent = str
+			continue
+		}
+		closures = append(closures, interfaces.MetadataClosure{
+			Ancestor:   parent,
+			Descendant: str,
+		})
+		parent = str
+	}
+
+	return m.closure.QueryExistByPair(ctx, closures)
 }
 
 func (m *metadataService) MoveDir(ctx context.Context, objectId, newParentId string) error {

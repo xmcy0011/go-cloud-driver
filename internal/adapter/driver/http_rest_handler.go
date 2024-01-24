@@ -2,11 +2,11 @@ package driver
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/oklog/ulid/v2"
+	"github.com/xmcy0011/go-cloud-driver/internal/logics/common"
 	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
 	"go.uber.org/zap"
 )
@@ -55,16 +55,17 @@ func (h *HttpRestHandler) RegisterRouter(g *gin.Engine) {
 func (h *HttpRestHandler) createDir(g *gin.Context) {
 	req := CreateDirReq{}
 	if err := g.ShouldBindJSON(&req); err != nil {
-		h.responseError(g, BadRequest(err))
+		h.responseError(g, common.WithCause(common.RestBadRequest, err.Error()))
 		return
 	}
 
 	if req.Name == "" {
-		h.responseError(g, BadRequest(errors.New("invalid object name")))
+		h.responseError(g, common.WithCause(common.RestBadRequest, "invalid object name"))
 		return
 	}
+
 	if _, err := ulid.Parse(req.ParentId); err != nil {
-		h.responseError(g, BadRequest(errors.New("bad ulid format with parent_id")))
+		h.responseError(g, common.WithCause(common.RestBadRequest, "invalid parent_id"))
 		return
 	}
 
@@ -83,12 +84,12 @@ func (h *HttpRestHandler) createDir(g *gin.Context) {
 func (h *HttpRestHandler) listDirSubTrees(g *gin.Context) {
 	objectId, ok := g.Params.Get("objectId")
 	if !ok {
-		h.responseError(g, BadRequest(errors.New("empty objectId")))
+		h.responseError(g, common.WithCause(common.RestBadRequest, "empty objectId"))
 		return
 	}
 
 	if _, err := ulid.Parse(objectId); err != nil {
-		h.responseError(g, BadRequest(errors.New("bad ulid format with objectId")))
+		h.responseError(g, common.WithCause(common.RestBadRequest, "bad ulid format with objectId"))
 		return
 	}
 
@@ -105,23 +106,23 @@ func (h *HttpRestHandler) listDirSubTrees(g *gin.Context) {
 func (h *HttpRestHandler) moveDir(g *gin.Context) {
 	req := MoveDirReq{}
 	if err := g.ShouldBindJSON(&req); err != nil {
-		h.responseError(g, BadRequest(err))
+		h.responseError(g, common.WithCause(common.RestBadRequest, err.Error()))
 		return
 	}
 
 	objectId, ok := g.Params.Get("objectId")
 	if !ok {
-		h.responseError(g, BadRequest(errors.New("url miss objectId field")))
+		h.responseError(g, common.WithCause(common.RestBadRequest, "url miss objectId field"))
 		return
 	}
 
 	if _, err := ulid.Parse(objectId); err != nil {
-		h.responseError(g, BadRequest(errors.New("invalid objectId")))
+		h.responseError(g, common.WithCause(common.RestBadRequest, "invalid objectId"))
 		return
 	}
 
 	if _, err := ulid.Parse(req.NewParentId); err != nil {
-		h.responseError(g, BadRequest(errors.New("invalid new_parent_id")))
+		h.responseError(g, common.WithCause(common.RestBadRequest, "invalid new_parent_id"))
 		return
 	}
 

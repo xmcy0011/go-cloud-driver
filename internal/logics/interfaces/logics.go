@@ -9,7 +9,7 @@ type EndUploadReq struct{}
 type EndUploadRsp struct{}
 
 type CreateDirReq struct {
-	ParentId string `json:"parent_id"` // 父目录 objectId
+	ParentId string `json:"parent_id"` // 父目录位置
 	Name     string `json:"name"`      // 文件夹名称
 	Ondup    int    `json:"ondup"`     // 冲突处理。1:重名报错 2:自动重命名 3:覆盖
 }
