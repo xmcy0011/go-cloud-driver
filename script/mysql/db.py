@@ -41,10 +41,8 @@ def connectMySQL():
                            database=db, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
 
     logger = getLogger()
-    logger.info(msg='connect db, host=%s, port=%d'.format(host, port))
+    logger.info(msg = "connect mysql, host={}, port={}, db={}".format(host, port, db))
 
-    with conn:
-        logger.info(
-            msg='connect db success, host=%s, port=%d'.format(host, port))
-
+    conn.ping(reconnect=True)
+    logger.info(msg='connect mysql success, host={}, port={}, db={}'.format(host, port, db))
     return conn

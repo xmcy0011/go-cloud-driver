@@ -1,9 +1,16 @@
 package logics
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/xmcy0011/go-cloud-driver/internal/adapter/driven/db"
+	"github.com/xmcy0011/go-cloud-driver/internal/conf"
+	"github.com/xmcy0011/go-cloud-driver/internal/infra/mysqldb"
+	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
 )
 
 type closure struct {
@@ -86,4 +93,68 @@ func getIndentation(level int) string {
 	}
 
 	return indentation
+}
+
+func TestCreateDir(t *testing.T) {
+	log := interfaces.MustNewLogger()
+
+	// user_name: cloud
+	// password: 123456
+	// db: go-cloud-driver
+	// host: 127.0.0.1
+	// port: 3306
+
+	// db
+	myDb := mysqldb.MustInit(conf.Database{
+		UserName: "cloud",
+		Password: "123456",
+		Db:       "go-cloud-driver",
+		Host:     "127.0.0.1",
+		Port:     3306,
+	}, log)
+
+	// 出站适配器
+	metadata := db.NewMetdata(myDb)
+	metadataClosure := db.NewMetadataClosure(myDb)
+
+	// 逻辑层
+	m := NewMetadataLogic(myDb, metadata, metadataClosure)
+
+	// a1: 10w
+	//  - b1: 1w
+	//		- c1 ...
+	//  - b2
+	rsp, err := m.CreateDir(context.Background(), interfaces.CreateDirReq{
+		ParentId: "00000000000000000000000000",
+		Name:     "a1",
+	})
+	assert.NoError(t, err)
+	// 10
+	for i := 0; i < 10; i++ {
+		rsp, err := m.CreateDir(context.Background(), interfaces.CreateDirReq{
+			ParentId: rsp.ObjectId,
+			Name:     fmt.Sprintf("b%d", i+1),
+		})
+		assert.NoError(t, err)
+		// 1w
+		for j := 0; j < 10000; j++ {
+			_, err := m.CreateDir(context.Background(), interfaces.CreateDirReq{
+				ParentId: rsp.ObjectId,
+				Name:     fmt.Sprintf("b%d", i+1),
+			})
+			assert.NoError(t, err)
+		}
+
+		t.Logf("current: %d", i)
+	}
+
+	// a2: 100w
+	//  - b1: 1w
+	//		- c1 ...
+	//  - b2
+	// rsp, err = m.CreateDir(context.Background(), interfaces.CreateDirReq{
+	// 	ParentId: "00000000000000000000000000",
+	// 	Name:     "a1",
+	// })
+	// assert.NoError(t, err)
 }

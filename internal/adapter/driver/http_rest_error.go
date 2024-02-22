@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
-	"github.com/xmcy0011/go-cloud-driver/internal/logics/common"
+	"github.com/xmcy0011/go-cloud-driver/internal/common"
 	"go.uber.org/zap"
 )
 

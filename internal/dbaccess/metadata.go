@@ -1,4 +1,4 @@
-package db
+package dbaccess
 
 import (
 	"context"
@@ -17,7 +17,7 @@ func NewMetdata(db *sql.DB) interfaces.DBMetadata {
 
 func (d *dbMetadata) Add(ctx context.Context, meta interfaces.Metadata, tx *sql.Tx) error {
 	sql := "insert into metadata(`object_id`,`parent_id`,`name`,`object_type`) values(?,?,?,?)"
-	_, err := tx.ExecContext(ctx, sql, meta.ObjectId, meta.ParentId, meta.Name, meta.ObjectId)
+	_, err := tx.ExecContext(ctx, sql, meta.ObjectId, meta.ParentId, meta.Name, meta.ObjectType)
 	return err
 }
 

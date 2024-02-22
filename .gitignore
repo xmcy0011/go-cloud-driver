@@ -22,3 +22,5 @@ go.work
 .vscode
 __pycache__
 __debug*
+
+cmd/cmd

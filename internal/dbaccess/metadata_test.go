@@ -1,4 +1,4 @@
-package db
+package dbaccess
 
 import (
 	"context"
@@ -31,10 +31,10 @@ func TestMetadataAdd(t *testing.T) {
 			tx, err := db.Begin()
 			require.NoError(t, err)
 			err = metadata.Add(context.Background(), interfaces.Metadata{
-				ObjectId:  uid,
-				ParentId:  "cc",
-				Name:      "aa",
-				BasicAttr: 1,
+				ObjectId:   uid,
+				ParentId:   "cc",
+				Name:       "aa",
+				ObjectType: 1,
 			}, tx)
 			require.NoError(t, err)
 		})
@@ -45,10 +45,10 @@ func TestMetadataAdd(t *testing.T) {
 			tx, err := db.Begin()
 			require.NoError(t, err)
 			err = metadata.Add(context.Background(), interfaces.Metadata{
-				ObjectId:  uid,
-				ParentId:  "cc",
-				Name:      "aa",
-				BasicAttr: 1,
+				ObjectId:   uid,
+				ParentId:   "cc",
+				Name:       "aa",
+				ObjectType: 1,
 			}, tx)
 			require.NoError(t, err)
 		})
@@ -67,10 +67,10 @@ func TestQueryCountById(t *testing.T) {
 			tx, err := db.Begin()
 			require.NoError(t, err)
 			err = metadata.Add(context.Background(), interfaces.Metadata{
-				ObjectId:  uid,
-				ParentId:  "cc",
-				Name:      "aa",
-				BasicAttr: 1,
+				ObjectId:   uid,
+				ParentId:   "cc",
+				Name:       "aa",
+				ObjectType: 1,
 			}, tx)
 			require.NoError(t, err)
 

@@ -2,11 +2,10 @@ package logics
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
-	"github.com/xmcy0011/go-cloud-driver/internal/logics/common"
+	"github.com/xmcy0011/go-cloud-driver/internal/common"
 	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
 	"github.com/xmcy0011/go-cloud-driver/internal/logics/service"
 )
@@ -15,9 +14,9 @@ type metadataLogic struct {
 	metadataSvc service.MetadataService
 }
 
-func NewMetadataLogic(db *sql.DB, metadata interfaces.DBMetadata, closure interfaces.DBMetadataClosure) interfaces.MetadataLogic {
+func NewMetadataLogic() interfaces.MetadataLogic {
 	return &metadataLogic{
-		metadataSvc: service.NewMetadataService(db, metadata, closure),
+		metadataSvc: service.NewMetadataService(dbPool, dbMetadata, dbMetadataClosure),
 	}
 }
 

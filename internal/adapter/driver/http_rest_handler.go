@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/oklog/ulid/v2"
-	"github.com/xmcy0011/go-cloud-driver/internal/logics/common"
+	"github.com/xmcy0011/go-cloud-driver/internal/common"
 	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
 	"go.uber.org/zap"
 )
@@ -41,15 +41,15 @@ type HttpRestHandler struct {
 
 func NewHttpRestHandler(metadata interfaces.MetadataLogic) HttpRestHandler {
 	return HttpRestHandler{
-		log:      interfaces.MustNewLogger(),
+		log:      common.GetLogger(),
 		metadata: metadata,
 	}
 }
 
 func (h *HttpRestHandler) RegisterRouter(g *gin.Engine) {
-	g.POST("/api/metadata/dirs", h.createDir)
-	g.GET("/api/metadata/dirs/:objectId/sub-trees", h.listDirSubTrees)
-	g.PUT("/api/metadata/dirs/:objectId/move", h.moveDir)
+	g.POST("/api/metastore/dirs", h.createDir)
+	g.GET("/api/metastore/dirs/:objectId/sub-trees", h.listDirSubTrees)
+	g.PUT("/api/metastore/dirs/:objectId/move", h.moveDir)
 }
 
 func (h *HttpRestHandler) createDir(g *gin.Context) {

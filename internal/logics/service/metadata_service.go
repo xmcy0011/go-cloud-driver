@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/oklog/ulid/v2"
-	"github.com/xmcy0011/go-cloud-driver/internal/logics/common"
+	"github.com/xmcy0011/go-cloud-driver/internal/common"
 	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
 	"github.com/xmcy0011/go-cloud-driver/pkg/dbhelper"
 	"github.com/xmcy0011/go-cloud-driver/pkg/errhelper"
@@ -31,7 +31,7 @@ type metadataService struct {
 }
 
 func NewMetadataService(db *sql.DB, metadata interfaces.DBMetadata, closure interfaces.DBMetadataClosure) MetadataService {
-	return &metadataService{db: db, metadata: metadata, closure: closure, log: interfaces.MustNewLogger()}
+	return &metadataService{db: db, metadata: metadata, closure: closure, log: common.GetLogger()}
 }
 
 func (m *metadataService) Create(ctx context.Context, metadata interfaces.Metadata) error {

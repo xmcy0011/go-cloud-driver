@@ -1,6 +1,6 @@
 package common
 
-// BasicAttr 对象类型
+// ObjectType 对象类型
 type ObjectType int
 
 const (

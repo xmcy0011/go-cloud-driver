@@ -49,6 +49,8 @@ type DBMetadataClosure interface {
 	MoveSubTree(ctx context.Context, objectId, parentId string, tx *sql.Tx) (deleteCount, insertCount int64, err error)
 	// QueryAllDescendants: 查询所有后代（包含自己，其深度为0），按照节点深度升序排序
 	QueryAllDescendants(ctx context.Context, ancestor string) ([]MetadataNode, error)
+	// QueryCountByAncestor: 查询祖先
+	QueryCountByAncestor(ctx context.Context, ancestor string) (int, error)
 	// CheckIsDescendant: 检查某个节点是否是后代节点
 	CheckIsDescendant(ctx context.Context, ancestor, descendant string, tx *sql.Tx) (bool, error)
 	// QueryCountByPair 查询路径上的祖先后代关系是否存在
