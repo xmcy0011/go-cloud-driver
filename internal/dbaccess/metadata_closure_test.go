@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"strconv"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/oklog/ulid/v2"
@@ -43,8 +41,48 @@ func TestClosureAdd(t *testing.T) {
 	})
 }
 
+func TestMoveLargeSubTree(t *testing.T) {
+	Convey("MoveLargeSubTree", t, func() {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		closure := NewMetadataClosure(db)
+		ctx := context.Background()
+
+		objectId := "c"
+		parentId := "b"
+
+		Convey("empty subtree", func() {
+			mock.ExpectQuery("^select").WithArgs(objectId, objectId, 10).WillReturnError(sql.ErrNoRows)
+			_, _, err := closure.MoveLargeSubTree(ctx, objectId, parentId, 10)
+			require.Equal(t, "empty subtree", err.Error())
+		})
+
+		Convey("success", func() {
+			// test
+			// |-a
+			//   |- c
+			//   	|- 2.txt
+			// |-b
+			// 按照路径枚举（深度降序）总结其闭包如下：
+			// test/a/c/2.txt => (2.txt, 2.txt, 0): 9, (2.txt, c, 1): 10, (2.txt, a, 2): 11, (2.txt, test, 3): 12
+			// test/a/c       => (c, c, 0): 6, (c, a, 1): 7, (c, test, 2): 8
+			// test/a         => (a, a, 0): 4, (a, test, 1): 5
+			// test/b         => (b, b, 0): 2, (b, test, 1): 3
+			// test           => (test, test, 0): 1
+			// 移动 test/a/c 到 test/b 下，相当于删除 test/a 的前缀，删除顺序从叶子开始：
+			// 2.txt 深度最深为3，删除 (2.txt, a, 2): 10, (2.txt, test, 3): 11
+			// c 深度次之为2，删除 (c, a, 1): 7, (c, test, 2): 8
+			mock.ExpectQuery("^select id from metadata_closure where descendant").WithArgs(objectId, objectId, 10).
+				WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(11).AddRow(10).AddRow(8).AddRow(7))
+			mock.ExpectExec("^delete from metadata_closure where id").WithArgs(11, 10, 8, 7)
+			_, _, err := closure.MoveLargeSubTree(ctx, objectId, parentId, 10)
+			require.NoError(t, err)
+		})
+	})
+}
+
 func MustInitDb() *sql.DB {
-	l, _ := logger.NewZapLogger("", true)
+	l, _ := logger.NewZapLogger(false)
 	port, _ := strconv.Atoi(os.Getenv("mysql_port"))
 	dbConn := mysqldb.MustInit(
 		conf.Database{
@@ -121,38 +159,4 @@ func BenchmarkMoveSubTree(b *testing.B) {
 		// b.Logf("b.N: %d, cost: %2.f s, prepare data: %d, objectId: %s, moveSubTree, deleteCount: %d, insertCount: %d, newObjectId: %s",
 		// 	b.N, time.Since(t1).Seconds(), subCount, root, deleteCount, insertCount, target)
 	})
-}
-
-func Mock(db *sql.DB) error {
-	_, err := db.Exec("delete from hydra_oauth2_jti_blacklist WHERE nid = '078dada1-d130-11ee-b0b9-8af344cb7127' AND expires_at < ?",
-		time.Now().Format("2006-01-02 15:04:05"))
-	if err != nil {
-		return err
-	}
-
-	signature := ulid.Make().String()
-	_, err = db.Exec("INSERT INTO `hydra_oauth2_jti_blacklist` (`expires_at`, `nid`, `signature`) VALUES (?, '078dada1-d130-11ee-b0b9-8af344cb7127', ?)",
-		time.Now().Format("2006-01-02 15:04:05"), signature)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func BenchmarkHyrd(b *testing.B) {
-	dbConn := MustInitDb()
-	for i := 0; i < b.N; i++ {
-
-		group := sync.WaitGroup{}
-		for j := 0; j < 20; j++ {
-			group.Add(1)
-			go func() {
-				err := Mock(dbConn)
-				assert.NoError(b, err)
-				group.Done()
-			}()
-		}
-		group.Wait()
-
-	}
 }

@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xmcy0011/go-cloud-driver/internal/adapter/driven/db"
 	"github.com/xmcy0011/go-cloud-driver/internal/conf"
+	"github.com/xmcy0011/go-cloud-driver/internal/dbaccess"
 	"github.com/xmcy0011/go-cloud-driver/internal/infra/mysqldb"
 	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
+	"github.com/xmcy0011/go-cloud-driver/pkg/logger"
 )
 
 type closure struct {
@@ -96,7 +98,7 @@ func getIndentation(level int) string {
 }
 
 func TestCreateDir(t *testing.T) {
-	log := interfaces.MustNewLogger()
+	log, _ := logger.NewZapLogger(os.Getenv("env") != "prod")
 
 	// user_name: cloud
 	// password: 123456
@@ -114,11 +116,14 @@ func TestCreateDir(t *testing.T) {
 	}, log)
 
 	// 出站适配器
-	metadata := db.NewMetdata(myDb)
-	metadataClosure := db.NewMetadataClosure(myDb)
+	metadata := dbaccess.NewMetdata(myDb)
+	metadataClosure := dbaccess.NewMetadataClosure(myDb)
+	SetDBPool(myDb)
+	SetDBMetadata(metadata)
+	SetDBMetadataClosure(metadataClosure)
 
 	// 逻辑层
-	m := NewMetadataLogic(myDb, metadata, metadataClosure)
+	m := NewMetadataLogic()
 
 	// a1: 10w
 	//  - b1: 1w

@@ -138,7 +138,7 @@ func (m *metadataService) MoveDir(ctx context.Context, objectId, newParentId str
 			return errhelper.WithFileLine(err)
 		}
 
-		deleteCount, insertCount, err := m.closure.MoveSubTree(ctx, objectId, newParentId, tx)
+		deleteCount, insertCount, err := m.closure.MoveLargeSubTree(ctx, objectId, newParentId, 1000)
 		if err != nil {
 			return errhelper.WithFileLine(err)
 		}

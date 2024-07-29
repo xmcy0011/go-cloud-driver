@@ -11,6 +11,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/stretchr/testify v1.8.4
+	go.uber.org/mock v0.4.0
 	go.uber.org/zap v1.26.0
 	gopkg.in/yaml.v3 v3.0.1
 )

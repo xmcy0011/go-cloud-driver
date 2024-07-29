@@ -5,6 +5,8 @@ import (
 	"database/sql"
 )
 
+//go:generate mockgen -package mock -source ./dbaccess.go -destination ./mock/dbaccess.go
+
 type Metadata struct {
 	ObjectId   string // 元数据id
 	ParentId   string // 父对象id
@@ -47,6 +49,8 @@ type DBMetadataClosure interface {
 	Delete(ctx context.Context, ancestor string, tx *sql.Tx) (rowsAffected int64, err error)
 	// MoveSubTree：移动子树到另外一个节点
 	MoveSubTree(ctx context.Context, objectId, parentId string, tx *sql.Tx) (deleteCount, insertCount int64, err error)
+	// MoveLargeSubTree：移动超大子树到另外一个节点
+	MoveLargeSubTree(ctx context.Context, objectId, parentId string, pageSize int) (deleteCount, insertCount int64, err error)
 	// QueryAllDescendants: 查询所有后代（包含自己，其深度为0），按照节点深度升序排序
 	QueryAllDescendants(ctx context.Context, ancestor string) ([]MetadataNode, error)
 	// QueryCountByAncestor: 查询祖先

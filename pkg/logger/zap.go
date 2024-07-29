@@ -3,7 +3,7 @@ package logger
 import "go.uber.org/zap"
 
 // NewZapLogger new zap logger
-func NewZapLogger(serviceName string, development bool) (*zap.Logger, error) {
+func NewZapLogger(development bool) (*zap.Logger, error) {
 	var config zap.Config
 	var encoding = "json"
 	if development {
@@ -15,11 +15,8 @@ func NewZapLogger(serviceName string, development bool) (*zap.Logger, error) {
 	config.Encoding = encoding
 
 	l, err := config.Build(
-		//zap.AddCaller(),
-		//zap.AddCallerSkip(callerSkip), //解决kratos 使用zap后 堆栈不正确的问题
-		zap.Fields(
-			zap.String("app", serviceName),
-		),
+	//zap.AddCaller(),
+	//zap.AddCallerSkip(callerSkip), //解决kratos 使用zap后 堆栈不正确的问题
 	)
 
 	return l, err

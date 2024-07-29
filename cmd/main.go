@@ -25,7 +25,7 @@ func main() {
 
 	config := conf.MustLoad(*config)
 
-	logger, err := logger.NewZapLogger("go-cloud-driver", os.Getenv("env") == "prod")
+	logger, err := logger.NewZapLogger(os.Getenv("env") != "prod")
 	if err != nil {
 		panic(err)
 	}

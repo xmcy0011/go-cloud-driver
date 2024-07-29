@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/xmcy0011/go-cloud-driver/internal/common"
 	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
+	"go.uber.org/zap"
 )
 
 type metadataClosure struct {
-	db *sql.DB
+	db  *sql.DB
+	log *zap.Logger
 }
 
 func NewMetadataClosure(db *sql.DB) interfaces.DBMetadataClosure {
-	return &metadataClosure{db: db}
+	return &metadataClosure{db: db, log: common.GetLogger()}
 }
 
 func (m *metadataClosure) Add(ctx context.Context, ancestor, descendant string, tx *sql.Tx) (int64, error) {
@@ -142,6 +145,165 @@ func (m *metadataClosure) MoveSubTree(ctx context.Context, objectId, parentId st
 	insertCount, err = r.RowsAffected()
 	if err != nil {
 		return
+	}
+
+	return
+}
+
+func (m *metadataClosure) MoveLargeSubTree(ctx context.Context, objectId, parentId string, pageSize int) (deleteCount, insertCount int64, err error) {
+	var (
+		rows  *sql.Rows  = nil
+		row   sql.Result = nil
+		tx    *sql.Tx    = nil
+		count int64      = 0
+	)
+
+	// 第一步：先断开 x 这个子树和祖先们的关系，x 变成孤立的树
+	// 如下目录结构：
+	// test
+	// |-a
+	//   |- c
+	//   	|- 2.txt
+	// |-b
+	// 按照路径枚举（深度降序）总结其闭包如下：
+	// test/a/c/2.txt => (2.txt, 2.txt, 0), (2.txt, c, 1), (2.txt, a, 2), (2.txt, test, 3)
+	// test/a/c       => (c, c, 0), (c, a, 1), (c, test, 2)
+	// test/a         => (a, a, 0), (a, test, 1)
+	// test/b         => (b, b, 0), (b, test, 1)
+	// test           => (test, test, 0)
+	// 移动就是删除前缀和后代的笛卡尔积组合，把 c 移动到 b 下，则需要删除 test/a 前缀，把 c 变成孤立的树：
+	// c/2.txt        => (2.txt, 2.txt, 0), (2.txt, c, 1)
+	// c              => (c, c, 0)
+	// 所以，SQL：
+	// 1）先查询 c 的所有祖先：SELECT ancestor FROM metadata_closure WHERE descendant='c' AND ancestor != descendant
+	// 2）再查询 c 的所有后代：SELECT descendant FROM metadata_closure WHERE ancestor='c'
+	// 3）取笛卡尔积(n * n)：删除 c 自己以及所有后代和祖先的关系，把 c 变成孤立的树
+
+	//
+	// 考虑到超大目录移动超时的情况，我们需要循环从叶子节点自底向上删除，将其变成孤立的树，插入时自上而下插入
+	//
+	for {
+		sqlStr := fmt.Sprintf(`select id from metadata_closure 
+			where descendant IN (SELECT descendant FROM 
+								(SELECT descendant FROM metadata_closure WHERE ancestor='%s') as d)	--  后代节点(包括自己)
+				AND ancestor IN (SELECT ancestor FROM 
+								(SELECT ancestor FROM metadata_closure WHERE descendant='%s' AND ancestor != descendant) as a)	-- 祖先节点，不包括自己
+				order by depth desc limit %d`, objectId, objectId, pageSize)
+
+		rows, err = m.db.QueryContext(ctx, sqlStr)
+		if err != nil {
+			return
+		}
+
+		// 删除和祖先的关系
+		args := make([]interface{}, 0, pageSize)
+		sqlPlacehoder := ""
+		for rows.Next() {
+			var id int = 0
+			if err = rows.Scan(&id); err != nil {
+				rows.Close()
+				return
+			}
+			sqlPlacehoder += "?,"
+			args = append(args, id)
+		}
+
+		if len(args) == 0 {
+			break
+		}
+
+		sqlStr = fmt.Sprintf(`delete from metadata_closure where id in(%s)`, strings.Trim(sqlPlacehoder, ","))
+		m.log.Debug("MoveLargeSubTree delete closure", zap.String("sql", sqlStr), zap.Any("args", args))
+
+		if row, err = m.db.ExecContext(ctx, sqlStr, args...); err != nil {
+			rows.Close()
+			return
+		}
+		if count, err = row.RowsAffected(); err != nil {
+			rows.Close()
+			return
+		}
+
+		rows.Close()
+		deleteCount += count
+	}
+
+	if deleteCount == 0 {
+		m.log.Warn("empty src subtree", zap.String("objectId", objectId), zap.String("parentId", parentId))
+	}
+
+	// 第二步：将上一步分离出的子树用笛卡尔积嫁接到新位置
+	//
+	// 考虑到超大目录，先查询孤立的树的后代，从根开始分批插入（深度由小到大）
+	//
+	// 1) 查询目标父路径
+	// 2）查询孤立的树的后代，深度由小到大
+	// 3）取笛卡尔积，插入到新目标位置
+	sqlStr := "select ancestor, descendant, depth from metadata_closure where descendant=?"
+	rows, err = m.db.QueryContext(ctx, sqlStr, parentId)
+	if err != nil {
+		return
+	}
+
+	parentPaths := make([]interfaces.MetadataClosure, 0)
+	for rows.Next() {
+		item := interfaces.MetadataClosure{}
+		if err = rows.Scan(&item.Ancestor, &item.Descendant, &item.Depth); err != nil {
+			rows.Close()
+			return
+		}
+		parentPaths = append(parentPaths, item)
+	}
+	rows.Close()
+	m.log.Info("MoveLargeSubTree before insert", zap.Any("parentPaths", parentPaths))
+
+	// 分批插入
+	startDescendant := ""
+	for {
+		// 查孤立树的所有后代，深度由小到大
+		sqlStr := `select descendant,depth from metadata_closure where 
+				   ancestor = ? and descendant > ? order by depth asc limit ?`
+		rows, err = m.db.QueryContext(ctx, sqlStr, objectId, startDescendant, pageSize)
+		if err != nil {
+			return
+		}
+
+		descendants := make([]interfaces.MetadataClosure, 0)
+		for rows.Next() {
+			item := interfaces.MetadataClosure{}
+			if err = rows.Scan(&item.Descendant, &item.Depth); err != nil {
+				rows.Close()
+				return
+			}
+			descendants = append(descendants, item)
+			startDescendant = item.Descendant
+		}
+		rows.Close()
+
+		if len(descendants) == 0 {
+			break
+		}
+
+		// 取笛卡尔积插入
+		tx, err = m.db.Begin()
+		if err != nil {
+			return
+		}
+
+		for i := range parentPaths {
+			for j := range descendants {
+				sqlStr = fmt.Sprintf("insert into metadata_closure(ancestor,descendant,depth) values('%s','%s',%d)",
+					parentPaths[i].Ancestor, descendants[j].Descendant, parentPaths[i].Depth+descendants[j].Depth)
+
+				m.log.Debug("MoveLargeSubTree insert closure", zap.String("sql", sqlStr))
+
+				tx.ExecContext(ctx, sqlStr)
+				insertCount += 1
+			}
+		}
+		if err = tx.Commit(); err != nil {
+			return
+		}
 	}
 
 	return
