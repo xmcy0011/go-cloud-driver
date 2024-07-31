@@ -215,8 +215,6 @@ func (m *metadataClosure) MoveLargeSubTree(ctx context.Context, objectId, parent
 		return
 	}
 
-	totalDescendantCount := 0
-
 	// 从叶子开始删除直到自己，如果此时没有查询到祖先，表明已经是一颗孤立的树
 	alreadyIsolatedTree := len(srcParentPaths) == 0
 
@@ -225,48 +223,38 @@ func (m *metadataClosure) MoveLargeSubTree(ctx context.Context, objectId, parent
 		for depth := maxDepth; depth >= 0; depth-- {
 			m.log.Info("MoveLargeSubTree delete depth", zap.Int("depth", depth), zap.Int("pageSize", pageSize))
 			lastDescendant := ""
+			startDescendant := ""
 			for {
-				// 分页查询指定深度的后代
-				sqlStr := fmt.Sprintf(`select descendant from metadata_closure
+				// 查询指定深度的后代的分页标记，从叶子向上分页删除
+				sqlStr := fmt.Sprintf(`select max(descendant) from 
+							(select descendant from metadata_closure
 							where ancestor = '%s' and depth = %d and descendant > '%s'
-							  order by descendant asc limit %d`, objectId, depth, lastDescendant, pageSize)
-				if rows, err = m.db.QueryContext(ctx, sqlStr); err != nil {
+							order by descendant asc limit %d) as tmp`, objectId, depth, lastDescendant, pageSize)
+				row = m.db.QueryRowContext(ctx, sqlStr)
+				var v sql.NullString
+				if err = row.Scan(&v); err != nil {
 					return
 				}
-
-				// 读取分页查询的后代
-				descendants := make([]string, 0)
-				for rows.Next() {
-					var descendant string
-					if err = rows.Scan(&descendant); err != nil {
-						rows.Close()
-						return
-					}
-					descendants = append(descendants, descendant)
-					lastDescendant = descendant
-				}
-				rows.Close()
-
-				if len(descendants) == 0 {
-					break
+				if v.Valid {
+					startDescendant = lastDescendant
+					lastDescendant = v.String
 				} else {
-					totalDescendantCount += len(descendants)
+					break
 				}
 
 				// 和祖先的所有关系对
 				m.log.Info("MoveLargeSubTree delete closure start")
 				args1 := make([]string, len(srcParentPaths))
-				args2 := make([]string, len(descendants))
 				for i := range srcParentPaths {
 					args1[i] = fmt.Sprintf("'%s'", srcParentPaths[i])
 				}
-				for j := range descendants {
-					args2[j] = fmt.Sprintf("'%s'", descendants[j])
-				}
 
 				// 祖先相同的，一次性批量删除
-				sqlStr = fmt.Sprintf("delete from metadata_closure where ancestor in (%s) and descendant in (%s)",
-					strings.Join(args1, ","), strings.Join(args2, ","))
+				sqlStr = fmt.Sprintf(`delete from metadata_closure where 
+					ancestor in (%s) and 
+					descendant in (select descendant from metadata_closure
+									where ancestor = '%s' and depth = %d and descendant > '%s' and descendant <='%s')`,
+					strings.Join(args1, ","), objectId, depth, startDescendant, lastDescendant)
 				if result, err = m.db.ExecContext(ctx, sqlStr); err != nil {
 					return
 				}
@@ -284,8 +272,7 @@ func (m *metadataClosure) MoveLargeSubTree(ctx context.Context, objectId, parent
 		} else {
 			m.log.Info(fmt.Sprintf("total delete closure: %d", deleteCount),
 				zap.Int("srcParentPathsCount", len(srcParentPaths)),
-				zap.Int("maxDescendantDepth", maxDepth),
-				zap.Int("totalDescendantCount", totalDescendantCount))
+				zap.Int("maxDescendantDepth", maxDepth))
 		}
 	}
 
@@ -316,45 +303,41 @@ func (m *metadataClosure) MoveLargeSubTree(ctx context.Context, objectId, parent
 
 	// 分批插入
 	for depth := 0; depth <= maxDepth; depth++ {
-		startDescendant := ""
+		lastDescendant := ""  // 包含
+		startDescendant := "" // 不包含
 		for {
 			// 查孤立树的所有后代，深度由小到大
-			sqlStr := `select descendant,depth from metadata_closure where 
-				   ancestor = ? and depth = ? and descendant > ? limit ?`
-			rows, err = m.db.QueryContext(ctx, sqlStr, objectId, depth, startDescendant, pageSize)
-			if err != nil {
+			// 先查插入的分页标记
+			sqlStr := `select max(descendant) from 
+					(select descendant from metadata_closure where 
+				   	 ancestor = ? and depth = ? and descendant > ? limit ?) as tmp`
+			row = m.db.QueryRowContext(ctx, sqlStr, objectId, depth, lastDescendant, pageSize)
+			var v sql.NullString
+			if err = row.Scan(&v); err != nil {
 				return
 			}
 
-			descendants := make([]interfaces.MetadataClosure, 0)
-			for rows.Next() {
-				item := interfaces.MetadataClosure{}
-				if err = rows.Scan(&item.Descendant, &item.Depth); err != nil {
-					rows.Close()
-					return
-				}
-				descendants = append(descendants, item)
-				startDescendant = item.Descendant
-			}
-			rows.Close()
-
-			if len(descendants) == 0 {
+			if v.Valid {
+				startDescendant = lastDescendant
+				lastDescendant = v.String
+			} else {
 				break
 			}
 
-			// 取笛卡尔积插入
-			args := make([]string, 0)
-			for i := range dstParentPaths {
-				for j := range descendants {
-					args = append(args, fmt.Sprintf("('%s','%s',%d)",
-						dstParentPaths[i].Ancestor,
-						descendants[j].Descendant,
-						dstParentPaths[i].Depth+descendants[j].Depth+1))
-				}
-			}
-
 			// 一次性批量插入
-			result, err = m.db.ExecContext(ctx, "insert into metadata_closure(ancestor,descendant,depth) values"+strings.Join(args, ","))
+			sqlStr = fmt.Sprintf(`insert into metadata_closure (ancestor, descendant,  depth)
+								  select T1.ancestor, T2.descendant, T1.depth + T2.depth + 1
+								  from metadata_closure as T1 
+								  cross join
+								  metadata_closure as T2
+								  where 
+								  -- T1 目标路径的所有祖先
+								  T1.descendant='%s' and
+								  -- T2 源路径指定深度的后代，分页
+								  T2.ancestor='%s' and T2.depth = %d and T2.descendant > '%s' and T2.descendant <= '%s';`,
+				parentId, objectId, depth, startDescendant, lastDescendant)
+
+			result, err = m.db.ExecContext(ctx, sqlStr)
 			if err != nil {
 				return
 			}
@@ -362,7 +345,7 @@ func (m *metadataClosure) MoveLargeSubTree(ctx context.Context, objectId, parent
 				return
 			}
 			insertCount += count
-			m.log.Debug("MoveLargeSubTree insert closure", zap.Int("count", len(dstParentPaths)*len(descendants)), zap.Int("depth", depth))
+			m.log.Debug("MoveLargeSubTree insert closure", zap.Int64("count", count), zap.Int("depth", depth))
 		}
 	}
 
