@@ -45,8 +45,7 @@ func (m *metadataClosure) Delete(ctx context.Context, ancestor string, tx *sql.T
 
 func (m *metadataClosure) MoveSubTree(ctx context.Context, objectId, parentId string, tx *sql.Tx) (deleteCount, insertCount int64, err error) {
 	var (
-		rows *sql.Rows  = nil
-		row  sql.Result = nil
+		row sql.Result = nil
 	)
 
 	// 第一步：先断开 x 这个子树和祖先们的关系，x 变成孤立的树
@@ -58,53 +57,15 @@ func (m *metadataClosure) MoveSubTree(ctx context.Context, objectId, parentId st
 	// 1）查询 a 的所有祖先：SELECT ancestor FROM metadata_closure WHERE descendant='%s' AND ancestor != descendant
 	// 2）查询 a 的所有后代：SELECT descendant FROM metadata_closure WHERE ancestor='%s'
 	// 3）组合2种情况：删除 a 和所有祖先的关系，以及 a 子树和所有祖先的关系。
-
-	sql := fmt.Sprintf(`select id,ancestor,descendant,depth from metadata_closure 
-	where descendant IN (SELECT descendant FROM 
-						(SELECT descendant FROM metadata_closure WHERE ancestor='%s') as d)	--  后代节点(包括自己)
-		AND ancestor IN (SELECT ancestor FROM 
-						(SELECT ancestor FROM metadata_closure WHERE descendant='%s' AND ancestor != descendant) as a)	-- 祖先节点，不包括自己`,
+	sql := fmt.Sprintf(`delete from metadata_closure 
+				where descendant IN (SELECT descendant FROM (SELECT descendant FROM metadata_closure WHERE ancestor='%s') as d)	--  后代节点(包括自己)
+					  AND ancestor IN (SELECT ancestor FROM (SELECT ancestor FROM metadata_closure WHERE descendant='%s' AND ancestor != descendant) as a)	-- 祖先节点，不包括自己)`,
 		objectId, objectId)
-
-	rows, err = tx.QueryContext(ctx, sql)
-	if err != nil {
+	if row, err = tx.ExecContext(ctx, sql); err != nil {
 		return
 	}
-	defer rows.Close()
-
-	deletedClosure := make([]*interfaces.MetadataClosure, 0)
-	for rows.Next() {
-		item := &interfaces.MetadataClosure{}
-		err = rows.Scan(&item.Id, &item.Ancestor, &item.Descendant, &item.Depth)
-		if err != nil {
-			return
-		}
-		deletedClosure = append(deletedClosure, item)
-	}
-
-	// 删除和祖先的关系
-	if len(deletedClosure) > 0 {
-		args := make([]interface{}, 0, len(deletedClosure))
-		sqlPlacehoder := ""
-		const maxDelete = 10000
-		i := 0
-		for _, item := range deletedClosure {
-			sqlPlacehoder += "?,"
-			args = append(args, item.Id)
-			i++
-
-			if (i%maxDelete == 0) || (i+1 == len(deletedClosure)) {
-				sql = fmt.Sprintf(`delete from metadata_closure where id in(%s)`, strings.Trim(sqlPlacehoder, ","))
-				if row, err = tx.ExecContext(ctx, sql, args...); err != nil {
-					return
-				}
-				if deleteCount, err = row.RowsAffected(); err != nil {
-					return
-				}
-				args = make([]interface{}, 0, len(deletedClosure))
-				sqlPlacehoder = ""
-			}
-		}
+	if deleteCount, err = row.RowsAffected(); err != nil {
+		return
 	}
 
 	// 插入到新的路径

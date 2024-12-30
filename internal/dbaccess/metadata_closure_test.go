@@ -17,6 +17,7 @@ import (
 	"github.com/xmcy0011/go-cloud-driver/internal/common"
 	"github.com/xmcy0011/go-cloud-driver/internal/conf"
 	"github.com/xmcy0011/go-cloud-driver/internal/infra/mysqldb"
+	"github.com/xmcy0011/go-cloud-driver/internal/logics/interfaces"
 	"github.com/xmcy0011/go-cloud-driver/pkg/logger"
 )
 
@@ -111,6 +112,75 @@ func BenchmarkMoveSubTree(b *testing.B) {
 		logger, _ := logger.NewZapLogger(true)
 		common.SetLogger(logger)
 		closure := NewMetadataClosure(dbConn)
+		dbMetadata := NewMetdata(dbConn)
+
+		b.StopTimer()
+
+		//b.N = 10000
+
+		// 单目录下模拟创建 b.N 个文件的闭包关系
+		// /dir1/dir2/file....
+		tx, err := dbConn.Begin()
+		dir1 := ulid.Make().String()
+		dbMetadata.Add(context.Background(), interfaces.Metadata{ObjectId: dir1, ParentId: dir1, Name: dir1, ObjectType: 1}, tx)
+		closure.Add(context.Background(), dir1, dir1, tx)
+		srcDirObjectId := ulid.Make().String()
+		dbMetadata.Add(context.Background(), interfaces.Metadata{ObjectId: srcDirObjectId, ParentId: dir1, Name: srcDirObjectId, ObjectType: 1}, tx)
+		closure.Add(context.Background(), dir1, srcDirObjectId, tx)
+
+		logger.Info(fmt.Sprintf("start prepare data, parentId: %s", srcDirObjectId))
+
+		assert.NoError(b, err)
+		for i := 0; i < b.N; i++ {
+			id := ulid.Make().String()
+			dbMetadata.Add(context.Background(), interfaces.Metadata{ObjectId: id, ParentId: srcDirObjectId, Name: id, ObjectType: 100 + i}, tx)
+			closure.Add(context.Background(), srcDirObjectId, id, tx)
+			if (i%10000 == 0 && i > 0) || (i+1 == b.N) {
+				assert.NoError(b, tx.Commit())
+				tx, err = dbConn.Begin()
+				assert.NoError(b, err)
+				logger.Info(fmt.Sprintf("b.N: %d, prepare data: %d", b.N, i))
+			}
+		}
+
+		subCount, err := closure.QueryCountByAncestor(context.Background(), srcDirObjectId)
+		assert.NoError(b, err)
+		logger.Info(fmt.Sprintf("b.N: %d, success create mock dir, count: %d", b.N, subCount))
+
+		// 创建目标位置：/test/a/b
+		tx, err = dbConn.Begin()
+		assert.NoError(b, err)
+		targetRoot := ulid.Make().String()
+		closure.Add(context.Background(), targetRoot, targetRoot, tx)
+		targetDir := ulid.Make().String()
+		closure.Add(context.Background(), targetRoot, targetDir, tx)
+		assert.NoError(b, tx.Commit())
+		b.StartTimer()
+
+		// 移动子树到目标位置（测试一次性移动）
+		t1 := time.Now()
+		tx, err = dbConn.Begin()
+		assert.NoError(b, err)
+		deleteCount, insertCount, err := closure.MoveSubTree(context.Background(), srcDirObjectId, targetDir, tx)
+		assert.NoError(b, err)
+		tx.Commit()
+
+		b.Logf("b.N: %d, prepare data: %d, srcDirObjectId: %s, targetDirObjectId: %s",
+			b.N, subCount, srcDirObjectId, targetDir)
+		b.Logf("b.N: %d, moveSubTree, cost: %2.f s, deleteCount: %d, insertCount: %d",
+			b.N, time.Since(t1).Seconds(), deleteCount, insertCount)
+	})
+}
+
+// BenchmarkMoveLargeSubTree 测试闭包表目录移动性能
+// example: 测试100万文件的移动
+// - go test -benchmem -run=^$ -bench ^BenchmarkMoveSubTree$ github.com/xmcy0011/go-cloud-driver/internal/dbaccess -benchtime=1000000x -cpu=1
+func BenchmarkMoveLargeSubTree(b *testing.B) {
+	b.Run("prepare", func(b *testing.B) {
+		dbConn := MustInitDb()
+		logger, _ := logger.NewZapLogger(true)
+		common.SetLogger(logger)
+		closure := NewMetadataClosure(dbConn)
 
 		b.StopTimer()
 
@@ -147,19 +217,6 @@ func BenchmarkMoveSubTree(b *testing.B) {
 		closure.Add(context.Background(), targetRoot, targetDir, tx)
 		assert.NoError(b, tx.Commit())
 		b.StartTimer()
-
-		// 移动子树到目标位置（测试一次性移动）
-		// t1 := time.Now()
-		// tx, err = dbConn.Begin()
-		// assert.NoError(b, err)
-		// deleteCount, insertCount, err := closure.MoveSubTree(context.Background(), dirObjectId, target2, tx)
-		// assert.NoError(b, err)
-		// tx.Commit()
-
-		// b.Logf("b.N: %d, prepare data: %d, objectId: %s, moveSubTree, newObjectId: %s",
-		// 	b.N, subCount, dirObjectId, target)
-		// b.Logf("b.N: %d, cost: %2.f s, prepare data: %d, objectId: %s, moveSubTree, deleteCount: %d, insertCount: %d, newObjectId: %s",
-		// 	b.N, time.Since(t1).Seconds(), subCount, root, deleteCount, insertCount, target)
 
 		// /dir1/dir2 => /test/a/b
 		// 移动子树到目标位置（测试分批移动）
