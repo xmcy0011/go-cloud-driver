@@ -25,3 +25,4 @@ __debug*
 
 cmd/cmd
 internal/logics/interfaces/mock
+web/node_modules
